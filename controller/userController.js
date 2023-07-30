@@ -59,7 +59,6 @@ const registerAUser = async (req, res) => {
             // let date = req.body.DOB;
             // let newDate = date.toString().split('T')[0];
             // req.body.DOB = newDate
-
             const files = req.files;
             //if (!files || !files.length > 0) return res.status(400).send({ status: false, message: "please enter profileImage" })
             const myFile = files[0]
@@ -150,7 +149,7 @@ const updatedUser = async (req, res) => {
         }, {
             new: true
         })
-        return res.status(200).send({ status: true, msg: "Profile Upsted Succesfully", findUser })
+        return res.status(200).send({ status: true, message: "Profile Upsted Succesfully", findUser })
     }
     catch (error) {
         return res.status(500).send({ status: false, message: error.message })
