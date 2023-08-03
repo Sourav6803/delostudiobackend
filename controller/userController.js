@@ -2,7 +2,10 @@ const User = require('../model/userModel')
 const bcrypt = require('bcrypt');
 const mongoose = require('mongoose')
 const jwt = require('jsonwebtoken')
-const file = require("../middleware/aws")
+const file = require("../middleware/aws");
+const sendEmail = require('./emailCtrl');
+const crypto = require("crypto");
+
 
 
 const isValid = function (value) {
@@ -12,35 +15,16 @@ const isValid = function (value) {
     return true;
 };
 
-const  verifyUser = async(req, res, next)=> {
-    try {
 
-        const { email } = req.method == "GET" ? req.query : req.body;
-
-        // check the user existance
-        let exist = await UserModel.findOne({ email });
-        if (!exist) return res.status(404).send({ error: "Can't find User!" });
-        next();
-
-    } catch (error) {
-        return res.status(404).send({ error: "Authentication Error" });
-    }
-}
 
 const registerAUser = async (req, res) => {
     try {
-        // const data = req.body
-        // const {} = data
         const email = req.body.email
-
         const findUser = await User.findOne({ email: email })
-
-
         if (findUser) {
             if (findUser.firstName == req.body.firstName) {
                 return res.status(200).send({ message: "First name already exist with this email" })
             }
-
             if (findUser.lastName == req.body.lastName) {
                 return res.status(200).send({ message: "Last name already exist with this email" })
             }
@@ -55,24 +39,30 @@ const registerAUser = async (req, res) => {
 
         }
         else {
-
-            // let date = req.body.DOB;
-            // let newDate = date.toString().split('T')[0];
-            // req.body.DOB = newDate
             const files = req.files;
             //if (!files || !files.length > 0) return res.status(400).send({ status: false, message: "please enter profileImage" })
             const myFile = files[0]
-            
+          
             //********uploading image to aws*******/
             const uploadImage = await file.uploadFile(myFile)
 
             req.body.profileImage = uploadImage;
             if (!req.body.profileImage) return res.status(400).send({ status: false, message: "please add profile Image" })
 
-            const bcryptPassword = await bcrypt.hash(req.body.password, 10)
-            req.body.password = bcryptPassword
+            // const bcryptPassword = await bcrypt.hash(req.body.password, 10)
+            // console.log(bcryptPassword)
+            // req.body.password = bcryptPassword
+
+            let msg = "Welcome , Successfully Login our website"
+            const data = {
+                to: req.body.email,
+                text : "hey user",
+                subject: "Forget Password Link",
+                html: msg
+            } 
 
             const createUser = await User.create(req.body)
+
 
 
             res.status(201).send({ status: true, message: "User Created Successfully", createUser })
@@ -182,6 +172,73 @@ const getUser = async function (req, res) {
     }
 };
 
+const updatePassword = async(req, res)=>{
+    const id = req.user
+    const {password } = req.body
+    const user = await User.findById(id)
+    if(user && (await user.isPasswordMatched(password))){
+        return res.status(400).send({ msg: "Please Provide a new password insted of old one"})
+    }else{
+            user.password = password
+            await user.save()
+            res.send({status:true , msg:"Password Updated Successfully"})
+        }
+}
 
 
-module.exports = { verifyUser ,registerAUser, loginUser, getAlluser, updatedUser, getUser }
+const forgetPasswordToken = async(req,res)=>{
+    try{
+        const {email} = req.body
+        
+        const user = await User.findOne({email: email})
+        
+        if(!user) return res.status(400).send({ status: false, msg: "emailId is not present in Database" });
+        
+        const token = await user.createPasswordResetToken()
+        
+        await user.save()
+        
+        const resetUrl = `Hi, Please follow this link to reset your password. This link is valid till 10 min from now. <a href="http://localhost:9000/reset-password/${token}"> Click Here </> `
+        const data = {
+            to: email,
+            text : "hey user",
+            subject: "Forget Password Link",
+            html: resetUrl
+        }
+        sendEmail(data)
+        res.send(resetUrl)
+    }
+    catch(err){
+        return res.status(500).send({ status: false, message: err.message })
+    }
+}
+
+const resetPassword = async(req,res)=>{
+    try{
+        const { password} = req.body
+        const {token} = req.params
+        const hashedToken = crypto.createHash("sha256").update(token).digest("hex")
+        console.log("hashedToken," , hashedToken)
+        const user = await User.findOne({
+            passwordResetToken: hashedToken,
+            passwordResetExpires: {$gt : Date.now()}
+        })
+        
+        
+        if(!user) return res.status(400).send({ message: "Token expired , please try again" })
+        user.password = password
+        user.passwordResetToken = undefined
+        user.passwordResetExpires = undefined
+        await user.save()
+        res.status(200).send({status: true , msg:"Password reset Succesfully" })
+    }
+    catch(err){
+        return res.status(500).send({ status: false, message: err.message })
+    }
+}
+
+
+
+
+
+module.exports = {registerAUser, loginUser, getAlluser, updatedUser, getUser, updatePassword, forgetPasswordToken , resetPassword}

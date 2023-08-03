@@ -11,9 +11,9 @@ const authMiddleware = async(req,res,next)=>{
         try{
             if(token){
                 const decode = jwt.verify(token , "group09")
-                console.log( "decode" ,decode)
+                // console.log( "decode" ,decode)
                 const user = await User.findById(decode?.userId)
-                console.log("user", user)
+                // console.log("user", user)
                 req.user = user;
                 next()
             }
